@@ -1,2 +1,2 @@
-include ':app'
+include ':android-network-monitor'
 rootProject.name='Android Network Monitor'
