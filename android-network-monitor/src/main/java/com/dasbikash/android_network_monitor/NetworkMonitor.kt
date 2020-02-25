@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.lang.IllegalStateException
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Helper class for network state detection
@@ -273,16 +274,41 @@ class NetworkMonitor : DefaultLifecycleObserver {
 
     private val mNetworkStateListenerMap = mutableMapOf<String,NetworkStateListener>()
 
+    private var lastOnConnectedInvokeTime = AtomicLong(System.currentTimeMillis())
+    private var lastOnDisConnectedInvokeTime = AtomicLong(System.currentTimeMillis())
+
+    private val MIN_NETWORK_STATE_LISTENER_INVOKE_INTERVAL = 3000L
+
     private fun invokeNetworkStateListeners(){
         GlobalScope.launch(Dispatchers.IO) {
-            mNetworkStateListenerMap.values.asSequence().forEach {
-                runOnMainThread({
-                    if (checkIfConnected()){
-                        it.doOnConnected?.invoke()
-                    }else{
-                        it.doOnDisConnected?.invoke()
+            if (when{
+                    checkIfConnected() -> {
+                        if (System.currentTimeMillis() - lastOnConnectedInvokeTime.get() >
+                            MIN_NETWORK_STATE_LISTENER_INVOKE_INTERVAL){
+                            lastOnConnectedInvokeTime.getAndSet(System.currentTimeMillis())
+                            true
+                        }else{
+                            false
+                        }
                     }
-                })
+                    else -> {
+                        if (System.currentTimeMillis() - lastOnDisConnectedInvokeTime.get() >
+                            MIN_NETWORK_STATE_LISTENER_INVOKE_INTERVAL){
+                            lastOnDisConnectedInvokeTime.getAndSet(System.currentTimeMillis())
+                            true
+                        }else{
+                            false
+                        }
+                    }
+                }) {
+                mNetworkStateListenerMap.values.asSequence().forEach {
+                    runOnMainThread({
+                        when (checkIfConnected()) {
+                            true -> it.doOnConnected?.invoke()
+                            false -> it.doOnDisConnected?.invoke()
+                        }
+                    })
+                }
             }
         }
     }
