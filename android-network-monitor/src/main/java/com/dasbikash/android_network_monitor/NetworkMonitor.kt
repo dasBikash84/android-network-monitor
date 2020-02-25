@@ -23,12 +23,27 @@ import java.lang.IllegalStateException
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Helper class for network state detection
+ * ```
+ * Helper class for monitoring network status and optionally
+ * attach listeners on network state change.
+ * ```
+ * ### Initialization (any one of below two)
+ * * `NetworkMonitor.init(activity)`
+ * * `NetworkMonitor.init(fragment)`
  *
- * 'fun initialize(context: Context)' must be called
- * on app start to to activate network state listener
+ * Singleton instance of "NetworkMonitor" will be
+ * attached with life-cycle of caller "AppCompatActivity" or "parent of caller Fragment".
+ * And will clear itself on said activity destroy.
+ * So, it makes best sense to call "init" from launcher activity.
  *
- * @author Bikash Das
+ * ### Usage
+ * * For checking network connection status : `NetworkMonitor.isConnected()`
+ * * For checking if connected to wify network : `NetworkMonitor.isOnWify()`
+ * * For checking if connected to cellular network : `NetworkMonitor.isOnMobileDataNetwork()`
+ * * To register Network State Listener : `NetworkMonitor.addNetworkStateListener(networkStateListener)`
+ * * To un-register Network State Listener : `NetworkMonitor.removeNetworkStateListener(networkStateListener)`
+ *
+ * @author Bikash Das(das.bikash.dev@gmail.com)
  */
 class NetworkMonitor : DefaultLifecycleObserver {
 
@@ -50,6 +65,12 @@ class NetworkMonitor : DefaultLifecycleObserver {
             }
         }
 
+        /**
+         * Initialize `NetworkMonitor` using AppCompatActivity instance
+         *
+         * @param activity AppCompatActivity
+         * @return `true` for init success
+         * */
         @JvmStatic
         fun init(activity: AppCompatActivity): Boolean {
             if (INSTANCE == null) {
@@ -64,6 +85,12 @@ class NetworkMonitor : DefaultLifecycleObserver {
             return false
         }
 
+        /**
+         * Initialize `NetworkMonitor` using Fragment instance
+         *
+         * @param fragment Fragment
+         * @return `true` for init success
+         * */
         @JvmStatic
         fun init(fragment: Fragment): Boolean {
             fragment.activity?.let {
@@ -74,30 +101,60 @@ class NetworkMonitor : DefaultLifecycleObserver {
             return false
         }
 
+        /**
+         * For checking network connection status
+         *
+         * @throws IllegalStateException If `NetworkMonitor` is not initialized
+         * @return `true` if connected
+         * */
         @JvmStatic
         fun isConnected():Boolean{
             checkInitStatus()
             return INSTANCE!!.checkIfConnected()
         }
 
+        /**
+         * For checking if connected to wify network
+         *
+         * @throws IllegalStateException If `NetworkMonitor` is not initialized
+         * @return `true` if connected to wify network
+         * */
         @JvmStatic
         fun isOnWify():Boolean{
             checkInitStatus()
             return INSTANCE!!.checkIfOnWify()
         }
 
+        /**
+         * For checking if connected to cellular network
+         *
+         * @throws IllegalStateException If `NetworkMonitor` is not initialized
+         * @return `true` if connected to cellular network
+         * */
         @JvmStatic
         fun isOnMobileDataNetwork():Boolean{
             checkInitStatus()
             return INSTANCE!!.checkIfOnMobileDataNetwork()
         }
 
+        /**
+         * To register Network State Listener
+         *
+         * @throws IllegalStateException If `NetworkMonitor` is not initialized
+         * @param networkStateListener NetworkStateListener instance for addition
+         * */
         @JvmStatic
         fun addNetworkStateListener(networkStateListener: NetworkStateListener) {
             checkInitStatus()
             INSTANCE!!.registerNetworkStateListener(networkStateListener)
         }
 
+        /**
+         * To remove Network State Listener
+         *
+         * @throws IllegalStateException If `NetworkMonitor` is not initialized
+         * @param networkStateListener NetworkStateListener instance for removal
+         * */
         @JvmStatic
         fun removeNetworkStateListener(networkStateListener: NetworkStateListener){
             checkInitStatus()
@@ -265,7 +322,6 @@ class NetworkMonitor : DefaultLifecycleObserver {
         Toast.makeText(context,message, Toast.LENGTH_SHORT).show()
 
     private fun registerNetworkStateListener(networkStateListener: NetworkStateListener) {
-        unRegisterNetworkStateListener(networkStateListener)
         mNetworkStateListenerMap[networkStateListener.id] = networkStateListener
     }
 
@@ -329,42 +385,47 @@ internal fun throwNotAppCompatActivityOrFragmentException() {
     throw IllegalStateException(NOT_APP_COMPAT_ACTIVITY_OR_FRAGMENT_MSG)
 }
 
-fun LifecycleOwner.initNetworkMonitor() {
-    when (this) {
-        is AppCompatActivity -> NetworkMonitor.init(this)
-        is Fragment -> NetworkMonitor.init(this)
-        else -> {
-            throwNotAppCompatActivityOrFragmentException()
-        }
-    }
-}
+/**
+ * Extension to initialize `NetworkMonitor` from `AppCompatActivity`
+ *
+ * */
+fun AppCompatActivity.initNetworkMonitor() = NetworkMonitor.init(this)
 
-fun LifecycleOwner.haveNetworkConnection():Boolean {
-    return when  {
-        this is AppCompatActivity || this is Fragment -> NetworkMonitor.isConnected()
-        else -> {
-            throwNotAppCompatActivityOrFragmentException()
-            return false
-        }
-    }
-}
+/**
+ * Extension to initialize `NetworkMonitor` from `Fragment`
+ *
+ * */
+fun Fragment.initNetworkMonitor() = NetworkMonitor.init(this)
 
-fun LifecycleOwner.isOnWify():Boolean {
-    return when  {
-        this is AppCompatActivity || this is Fragment -> NetworkMonitor.isOnWify()
-        else -> {
-            throwNotAppCompatActivityOrFragmentException()
-            return false
-        }
-    }
-}
+/**
+ * Extension to check if connected to network
+ *
+ * @throws IllegalStateException If `NetworkMonitor` is not initialized
+ * */
+fun Any.haveNetworkConnection():Boolean = NetworkMonitor.isConnected()
 
-fun LifecycleOwner.isOnMobileDataNetwork():Boolean {
-    return when  {
-        this is AppCompatActivity || this is Fragment -> NetworkMonitor.isOnMobileDataNetwork()
-        else -> {
-            throwNotAppCompatActivityOrFragmentException()
-            return false
-        }
-    }
-}
+/**
+ * Extension to check if connected to wify network
+ *
+ * @throws IllegalStateException If `NetworkMonitor` is not initialized
+ * */
+fun Any.isOnWify():Boolean = NetworkMonitor.isOnWify()
+
+/**
+ * Extension to check if connected to mobile network
+ *
+ * @throws IllegalStateException If `NetworkMonitor` is not initialized
+ * */
+fun Any.isOnMobileDataNetwork():Boolean = NetworkMonitor.isOnMobileDataNetwork()
+
+/**
+ * Extension to register Network State Listener
+ *
+ * */
+fun Any.addNetworkStateListener(networkStateListener:NetworkStateListener) = NetworkMonitor.addNetworkStateListener(networkStateListener)
+
+/**
+ * Extension to remove Network State Listener
+ *
+ * */
+fun Any.removeNetworkStateListener(networkStateListener:NetworkStateListener) = NetworkMonitor.removeNetworkStateListener(networkStateListener)
