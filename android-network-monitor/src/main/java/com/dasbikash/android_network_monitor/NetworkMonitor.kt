@@ -8,13 +8,14 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.dasbikash.android_extensions.runOnMainThread
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -239,5 +240,9 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
         INSTANCE = null
         mNetworkStateListenerMap.clear()
         (owner as AppCompatActivity).unregisterReceiver(this)
+    }
+
+    private fun runOnMainThread(task: () -> Any?){
+        Handler(Looper.getMainLooper()).post( { task() })
     }
 }
