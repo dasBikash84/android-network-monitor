@@ -19,6 +19,7 @@ import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import java.lang.IllegalStateException
 
 /**
  * Helper class for network state detection
@@ -28,28 +29,35 @@ import kotlinx.coroutines.launch
  *
  * @author Bikash Das
  */
-class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
+class NetworkMonitor : DefaultLifecycleObserver {
 
     companion object{
 
+        private const val NO_INTERNET_TOAST_MESSAGE = "No internet connection!!!"
+        private const val NOT_INITIALIZED_MESSAGE = "\"NetworkMonitor\" is not initialized!! Please call \"init\" first."
+
         @Volatile
         private var INSTANCE: NetworkMonitor?=null
-
-        private const val NO_INTERNET_TOAST_MESSAGE = "No internet connection!!!"
 
         private enum class NETWORK_TYPE {
             MOBILE, WIFI, WIMAX, ETHERNET, BLUETOOTH, DC, OTHER, UN_INITIALIZED
         }
 
+        private fun checkInitStatus(){
+            if (INSTANCE == null){
+                throw IllegalStateException(NOT_INITIALIZED_MESSAGE)
+            }
+        }
+
         @JvmStatic
         fun init(activity: AppCompatActivity): Boolean {
             if (INSTANCE == null) {
-                synchronized(NetworkMonitor::class.java) {
-                    if (INSTANCE == null) {
+                if (INSTANCE == null) {
+                    GlobalScope.launch {
                         INSTANCE = NetworkMonitor()
-                        INSTANCE!!.inititialize(activity)
-                        return true
+                        INSTANCE!!.initialize(activity)
                     }
+                    return true
                 }
             }
             return false
@@ -66,18 +74,62 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
         }
 
         @JvmStatic
-        fun getInstance():NetworkMonitor? = INSTANCE
+        fun isConnected():Boolean{
+            checkInitStatus()
+            return INSTANCE!!.checkIfConnected()
+        }
+
+        @JvmStatic
+        fun isOnWify():Boolean{
+            checkInitStatus()
+            return INSTANCE!!.checkIfOnWify()
+        }
+
+        @JvmStatic
+        fun isOnMobileDataNetwork():Boolean{
+            checkInitStatus()
+            return INSTANCE!!.checkIfOnMobileDataNetwork()
+        }
+
+        @JvmStatic
+        fun addNetworkStateListener(networkStateListener: NetworkStateListener) {
+            checkInitStatus()
+            INSTANCE!!.registerNetworkStateListener(networkStateListener)
+        }
+
+        @JvmStatic
+        fun removeNetworkStateListener(networkStateListener: NetworkStateListener){
+            checkInitStatus()
+            INSTANCE!!.unRegisterNetworkStateListener(networkStateListener)
+        }
+
+        fun showNoInternetToast(context: Context) {
+            checkInitStatus()
+            return INSTANCE!!.showNoInternetToast(context)
+        }
+
+        fun showNoInternetToastAnyWay(context: Context) {
+            checkInitStatus()
+            return INSTANCE!!.showNoInternetToastAnyWay(context)
+        }
     }
 
     private var mNoInternetToastShown = false
     private var mReceiverRegistered = false
     private var mCurrentNetworkType = NETWORK_TYPE.UN_INITIALIZED
+    private val CONNECTIVITY_CHANGE_FILTER = "android.net.conn.CONNECTIVITY_CHANGE"
+    private val intentFilterForConnectivityChangeBroadcastReceiver: IntentFilter
+        get() = IntentFilter(CONNECTIVITY_CHANGE_FILTER)
 
-
-    override fun onReceive(context: Context, intent: Intent?) {
-        if (intent != null && intent.action != null &&
+    private val broadcastReceiver = object : BroadcastReceiver(){
+        override fun onReceive(context: Context?, intent: Intent?) {
+            debugLog("onReceive")
+            if (intent != null && intent.action != null &&
                 intent.action!!.equals(CONNECTIVITY_CHANGE_FILTER, ignoreCase = true)) {
-            refreshNetworkType(context)
+                context?.let {
+                    refreshNetworkType(it)
+                }
+            }
         }
     }
 
@@ -105,7 +157,7 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
                 val network = connectivityManager.activeNetwork
                 val networkCapabilities = connectivityManager.getNetworkCapabilities(network)
                 if (networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ?: false ||
-                        networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI_AWARE) ?: false) {
+                    networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI_AWARE) ?: false) {
                     mCurrentNetworkType =
                         NETWORK_TYPE.WIFI
                 } else if (networkCapabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)  ?: false) {
@@ -127,38 +179,37 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
             mCurrentNetworkType =
                 NETWORK_TYPE.DC
         }
-        Log.d(this.javaClass.simpleName,"Current Network Type: ${mCurrentNetworkType.name}")
+        debugLog("Current Network Type: ${mCurrentNetworkType.name}")
         invokeNetworkStateListeners()
     }
 
-    private val CONNECTIVITY_CHANGE_FILTER = "android.net.conn.CONNECTIVITY_CHANGE"
-
-    private val intentFilterForConnectivityChangeBroadcastReceiver: IntentFilter
-        get() = IntentFilter(CONNECTIVITY_CHANGE_FILTER)
+    private fun debugLog(message: String) {
+        Log.d(this.javaClass.simpleName, message)
+    }
 
     /**
      * To check if connected to mobile network
      *
      * @return true if connected to mobile network else false
      * */
-    fun isOnMobileDataNetwork(): Boolean
-        = mCurrentNetworkType == NETWORK_TYPE.MOBILE
+    private fun checkIfOnMobileDataNetwork(): Boolean
+            = mCurrentNetworkType == NETWORK_TYPE.MOBILE
 
     /**
      * To check if connected to Wify network
      *
      * @return true if connected to mobile network else false
      * */
-    fun isOnWify(): Boolean = mCurrentNetworkType == NETWORK_TYPE.WIFI
+    private fun checkIfOnWify(): Boolean = mCurrentNetworkType == NETWORK_TYPE.WIFI
 
     /**
      * To check network connectivity status
      *
      * @return true if connected else false
      * */
-    fun isConnected(): Boolean =
+    private fun checkIfConnected(): Boolean =
         mCurrentNetworkType != NETWORK_TYPE.DC &&
-            mCurrentNetworkType != NETWORK_TYPE.UN_INITIALIZED
+                mCurrentNetworkType != NETWORK_TYPE.UN_INITIALIZED
 
     /**
      * Method to initialize class. Should be called on app start up.
@@ -167,7 +218,7 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
      * */
     private fun resisterBroadcastReceiver(activity: AppCompatActivity):Boolean {
         if (!mReceiverRegistered) {
-            activity.applicationContext.registerReceiver(this,
+            activity.applicationContext.registerReceiver(broadcastReceiver,
                 intentFilterForConnectivityChangeBroadcastReceiver
             )
             mReceiverRegistered = true
@@ -176,7 +227,7 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
         return false
     }
 
-    private fun inititialize(activity: AppCompatActivity):Boolean {
+    private fun initialize(activity: AppCompatActivity):Boolean {
         return resisterBroadcastReceiver(activity).apply {
             if (this) {
                 activity.lifecycle.addObserver(this@NetworkMonitor)
@@ -190,8 +241,8 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
      *
      * @param context Android Context
      * */
-    fun showNoInternetToast(context: Context) {
-        if (!isConnected() && !mNoInternetToastShown) {
+    private fun showNoInternetToast(context: Context) {
+        if (!checkIfConnected() && !mNoInternetToastShown) {
             mNoInternetToastShown = true
             showShortToast(context,NO_INTERNET_TOAST_MESSAGE)
         }
@@ -202,8 +253,8 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
      *
      * @param context Android Context
      * */
-    fun showNoInternetToastAnyWay(context: Context) {
-        if (!isConnected()) {
+    private fun showNoInternetToastAnyWay(context: Context) {
+        if (!checkIfConnected()) {
             mNoInternetToastShown = true
             showShortToast(context,NO_INTERNET_TOAST_MESSAGE)
         }
@@ -212,12 +263,12 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
     private fun showShortToast(context: Context,message: String) =
         Toast.makeText(context,message, Toast.LENGTH_SHORT).show()
 
-    fun addNetworkStateListener(networkStateListener: NetworkStateListener) {
-        removeNetworkStateListener(networkStateListener)
-        mNetworkStateListenerMap.put(networkStateListener.id,networkStateListener)
+    private fun registerNetworkStateListener(networkStateListener: NetworkStateListener) {
+        unRegisterNetworkStateListener(networkStateListener)
+        mNetworkStateListenerMap[networkStateListener.id] = networkStateListener
     }
 
-    fun removeNetworkStateListener(networkStateListener: NetworkStateListener) =
+    private fun unRegisterNetworkStateListener(networkStateListener: NetworkStateListener) =
         mNetworkStateListenerMap.remove(networkStateListener.id)
 
     private val mNetworkStateListenerMap = mutableMapOf<String,NetworkStateListener>()
@@ -226,10 +277,10 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
         GlobalScope.launch(Dispatchers.IO) {
             mNetworkStateListenerMap.values.asSequence().forEach {
                 runOnMainThread({
-                    if (isConnected()){
-                        it.doOnConnected()
+                    if (checkIfConnected()){
+                        it.doOnConnected?.invoke()
                     }else{
-                        it.doOnDisConnected
+                        it.doOnDisConnected?.invoke()
                     }
                 })
             }
@@ -237,12 +288,57 @@ class NetworkMonitor : BroadcastReceiver(), DefaultLifecycleObserver {
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
-        INSTANCE = null
         mNetworkStateListenerMap.clear()
-        (owner as AppCompatActivity).unregisterReceiver(this)
+        (owner as AppCompatActivity).applicationContext.unregisterReceiver(broadcastReceiver)
+        INSTANCE = null
     }
 
     private fun runOnMainThread(task: () -> Any?){
         Handler(Looper.getMainLooper()).post( { task() })
+    }
+}
+
+internal val NOT_APP_COMPAT_ACTIVITY_OR_FRAGMENT_MSG = "Should be called only from AppCompatActivity/Fragment!!"
+internal fun throwNotAppCompatActivityOrFragmentException() {
+    throw IllegalStateException(NOT_APP_COMPAT_ACTIVITY_OR_FRAGMENT_MSG)
+}
+
+fun LifecycleOwner.initNetworkMonitor() {
+    when (this) {
+        is AppCompatActivity -> NetworkMonitor.init(this)
+        is Fragment -> NetworkMonitor.init(this)
+        else -> {
+            throwNotAppCompatActivityOrFragmentException()
+        }
+    }
+}
+
+fun LifecycleOwner.haveNetworkConnection():Boolean {
+    return when  {
+        this is AppCompatActivity || this is Fragment -> NetworkMonitor.isConnected()
+        else -> {
+            throwNotAppCompatActivityOrFragmentException()
+            return false
+        }
+    }
+}
+
+fun LifecycleOwner.isOnWify():Boolean {
+    return when  {
+        this is AppCompatActivity || this is Fragment -> NetworkMonitor.isOnWify()
+        else -> {
+            throwNotAppCompatActivityOrFragmentException()
+            return false
+        }
+    }
+}
+
+fun LifecycleOwner.isOnMobileDataNetwork():Boolean {
+    return when  {
+        this is AppCompatActivity || this is Fragment -> NetworkMonitor.isOnMobileDataNetwork()
+        else -> {
+            throwNotAppCompatActivityOrFragmentException()
+            return false
+        }
     }
 }
