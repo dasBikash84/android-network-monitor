@@ -31,10 +31,6 @@ import java.util.concurrent.atomic.AtomicLong
  * * `NetworkMonitor.init(activity)`
  * * `NetworkMonitor.init(fragment)`
  *
- * Singleton instance of "NetworkMonitor" will be
- * attached with life-cycle of caller "AppCompatActivity" or "parent of caller Fragment".
- * And will clear itself on said activity destroy.
- * So, it makes best sense to call "init" from launcher activity.
  *
  * ### Usage
  * * For checking network connection status : `NetworkMonitor.isConnected()`
@@ -45,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * @author Bikash Das(das.bikash.dev@gmail.com)
  */
-class NetworkMonitor : DefaultLifecycleObserver {
+class NetworkMonitor {
 
     companion object{
 
@@ -72,17 +68,15 @@ class NetworkMonitor : DefaultLifecycleObserver {
          * @return `true` for init success
          * */
         @JvmStatic
-        fun init(activity: AppCompatActivity): Boolean {
-            if (INSTANCE == null) {
-                if (INSTANCE == null) {
-                    GlobalScope.launch {
-                        INSTANCE = NetworkMonitor()
-                        INSTANCE!!.initialize(activity)
-                    }
-                    return true
-                }
+        fun init(activity: AppCompatActivity) {
+            if (INSTANCE !=null){
+                INSTANCE?.clearInstance(activity)
+                INSTANCE = null
             }
-            return false
+            GlobalScope.launch {
+                INSTANCE = NetworkMonitor()
+                INSTANCE?.initialize(activity)
+            }
         }
 
         /**
@@ -92,13 +86,12 @@ class NetworkMonitor : DefaultLifecycleObserver {
          * @return `true` for init success
          * */
         @JvmStatic
-        fun init(fragment: Fragment): Boolean {
+        fun init(fragment: Fragment) {
             fragment.activity?.let {
                 if (it is AppCompatActivity){
                     return init(it)
                 }
             }
-            return false
         }
 
         /**
@@ -286,11 +279,7 @@ class NetworkMonitor : DefaultLifecycleObserver {
     }
 
     private fun initialize(activity: AppCompatActivity):Boolean {
-        return resisterBroadcastReceiver(activity).apply {
-            if (this) {
-                activity.lifecycle.addObserver(this@NetworkMonitor)
-            }
-        }
+        return resisterBroadcastReceiver(activity)
     }
 
     /**
@@ -360,8 +349,8 @@ class NetworkMonitor : DefaultLifecycleObserver {
                 mNetworkStateListenerMap.values.asSequence().forEach {
                     runOnMainThread({
                         when (checkIfConnected()) {
-                            true -> it.doOnConnected?.invoke()
-                            false -> it.doOnDisConnected?.invoke()
+                            true -> it.runOnConnected()
+                            false -> it.runOnDisConnected()
                         }
                     })
                 }
@@ -369,10 +358,9 @@ class NetworkMonitor : DefaultLifecycleObserver {
         }
     }
 
-    override fun onDestroy(owner: LifecycleOwner) {
+    internal fun clearInstance(context: Context){
+        context.applicationContext.unregisterReceiver(broadcastReceiver)
         mNetworkStateListenerMap.clear()
-        (owner as AppCompatActivity).applicationContext.unregisterReceiver(broadcastReceiver)
-        INSTANCE = null
     }
 
     private fun runOnMainThread(task: () -> Any?){

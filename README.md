@@ -35,13 +35,8 @@ dependencies {
         //or
     NetworkMonitor.init(fragment) // from any class
         //or
-    initNetworkMonitor() // from inside of AppCompatActivity/Fragment class body
+    initNetworkMonitor() // from inside of AppCompatActivity/Fragment class body       
         
-    // Singleton instance of "NetworkMonitor" will be
-    //attached with life-cycle of caller "AppCompatActivity" or "parent of caller Fragment".
-    //And it will clear itself on said activity destroy.
-    //So, it makes best sense to call "init" from launcher activity to ensure
-    //"NetworkMonitor" availability throughout entire application. 
 ```
 ##### For checking network connection status:
 ```
