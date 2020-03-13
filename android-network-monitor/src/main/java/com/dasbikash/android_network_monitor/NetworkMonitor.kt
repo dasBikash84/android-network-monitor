@@ -163,6 +163,17 @@ class NetworkMonitor {
             checkInitStatus()
             return INSTANCE!!.showNoInternetToastAnyWay(context)
         }
+
+        @JvmStatic
+        fun <T> runWithNetwork(context: Context,task:()->T?):Boolean{
+            if (isConnected()){
+                task()
+                return true
+            }else{
+                showNoInternetToastAnyWay(context)
+                return false
+            }
+        }
     }
 
     private var mNoInternetToastShown = false
