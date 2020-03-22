@@ -18,8 +18,8 @@ import java.util.*
  * */
 class NetworkStateListener private constructor(
     internal val id:String = UUID.randomUUID().toString(),
-    private val doOnConnected:(()->Any?)?,
-    private val doOnDisConnected:(()->Any?)?
+    private val doOnConnected:(()->Unit)?,
+    private val doOnDisConnected:(()->Unit)?
 ):DefaultLifecycleObserver{
     private var isDestroyed = false
     override fun onDestroy(owner: LifecycleOwner) {
@@ -40,13 +40,12 @@ class NetworkStateListener private constructor(
 
     companion object{
         @JvmStatic
-        fun <T,K> getInstance(doOnConnected:(()->T?)?=null,
-                        doOnDisConnected:(()->K?)?=null,
+        fun getInstance(doOnConnected:(()->Unit)?=null,
+                        doOnDisConnected:(()->Unit)?=null,
                         lifecycleOwner: LifecycleOwner?=null):NetworkStateListener {
             val networkStateListener = NetworkStateListener(
                                             doOnConnected = doOnConnected,
-                                            doOnDisConnected = doOnDisConnected
-                                            )
+                                            doOnDisConnected = doOnDisConnected)
             lifecycleOwner?.lifecycle?.addObserver(networkStateListener)
             return networkStateListener
         }
