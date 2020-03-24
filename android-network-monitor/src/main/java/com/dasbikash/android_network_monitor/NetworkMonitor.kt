@@ -14,8 +14,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -68,29 +66,12 @@ class NetworkMonitor {
          * @return `true` for init success
          * */
         @JvmStatic
-        fun init(activity: AppCompatActivity) {
-            if (INSTANCE !=null){
-                INSTANCE?.clearInstance(activity)
-                INSTANCE = null
-            }
+        fun init(context: Context) {
+            INSTANCE?.clearInstance(context)
+            INSTANCE = null
             GlobalScope.launch {
                 INSTANCE = NetworkMonitor()
-                INSTANCE?.initialize(activity)
-            }
-        }
-
-        /**
-         * Initialize `NetworkMonitor` using Fragment instance
-         *
-         * @param fragment Fragment
-         * @return `true` for init success
-         * */
-        @JvmStatic
-        fun init(fragment: Fragment) {
-            fragment.activity?.let {
-                if (it is AppCompatActivity){
-                    return init(it)
-                }
+                INSTANCE?.initialize(context)
             }
         }
 
@@ -278,9 +259,9 @@ class NetworkMonitor {
      *
      * @param context Android Context
      * */
-    private fun resisterBroadcastReceiver(activity: AppCompatActivity):Boolean {
+    private fun resisterBroadcastReceiver(context: Context):Boolean {
         if (!mReceiverRegistered) {
-            activity.applicationContext.registerReceiver(broadcastReceiver,
+            context.applicationContext.registerReceiver(broadcastReceiver,
                 intentFilterForConnectivityChangeBroadcastReceiver
             )
             mReceiverRegistered = true
@@ -289,8 +270,8 @@ class NetworkMonitor {
         return false
     }
 
-    private fun initialize(activity: AppCompatActivity):Boolean {
-        return resisterBroadcastReceiver(activity)
+    private fun initialize(context: Context):Boolean {
+        return resisterBroadcastReceiver(context)
     }
 
     /**
@@ -394,7 +375,7 @@ fun AppCompatActivity.initNetworkMonitor() = NetworkMonitor.init(this)
  * Extension to initialize `NetworkMonitor` from `Fragment`
  *
  * */
-fun Fragment.initNetworkMonitor() = NetworkMonitor.init(this)
+fun Fragment.initNetworkMonitor() = context?.let { NetworkMonitor.init(it)}
 
 /**
  * Extension to check if connected to network
